@@ -167,10 +167,9 @@ object Day13 extends App {
   }
 
   def runUntilOnlyOneLeft(grid: Vector[Vector[Track]])(carts: List[Cart]): Cart = {
-    if(carts.size == 1) {
-      carts.head
-    } else {
-      runUntilOnlyOneLeft(grid)(moveCarts(grid, removeCrashedCarts = true)(carts))
+    carts match {
+      case x::Nil => x
+      case _ => runUntilOnlyOneLeft(grid)(moveCarts(grid, removeCrashedCarts = true)(carts))
     }
   }
 
