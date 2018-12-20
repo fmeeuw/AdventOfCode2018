@@ -75,23 +75,25 @@ object Day15 extends App {
 
 
   object Game {
-    def parse(lines: Vector[String],initialHitPoints: Int = 200, initialAttackPower: Int = 3): Game = {
+    def parse(lines: Vector[String], initialHitPoints: Int = 200, initialAttackPowerElves: Int = 3, initialAttackPowerGoblins: Int = 3): Game = {
       val area = Area.parse(lines)
-      val creatures = parseCreatures(lines, initialHitPoints, initialAttackPower)
+      val creatures = parseCreatures(lines, initialHitPoints, initialAttackPowerElves, initialAttackPowerGoblins)
       Game(area, creatures)
     }
 
-    def parseCreatures(lines: Vector[String], initialHitPoints: Int, initialAttackPower: Int): Map[String, Creature] = {
+    def parseCreatures(lines: Vector[String], initialHitPoints: Int, initialAttackPowerElves: Int, initialAttackPowerGoblins: Int): Map[String, Creature] = {
       val creatures = lines.zipWithIndex.flatMap { case (line, y) =>
         line.toVector.zipWithIndex.collect {
-          case ('E', x) => Creature(name = s"Elf-$x-$y", race = Elf, position = Point(x, y), hitPoints = initialHitPoints, attackPower = initialAttackPower)
-          case ('G', x) => Creature(name = s"Goblin-$x-$y", race = Goblin, position = Point(x, y), hitPoints = initialHitPoints, attackPower = initialAttackPower)
+          case ('E', x) => Creature(name = s"Elf-$x-$y", race = Elf, position = Point(x, y), hitPoints = initialHitPoints, attackPower = initialAttackPowerElves)
+          case ('G', x) => Creature(name = s"Goblin-$x-$y", race = Goblin, position = Point(x, y), hitPoints = initialHitPoints, attackPower = initialAttackPowerGoblins)
         }
       }
       creatures.map(c => c.name -> c).toMap
     }
   }
   case class Game(area: Area, creatures: Map[String, Creature], noEnemiesFound: Boolean = false) {
+
+    def nrOfElfes: Int = creatures.values.count(_.race == Elf)
 
     def reachableNeighbours(current: Point, self: String): Vector[Point] = area.adjacentTo(current).filter(canMoveTo(self))
 
@@ -254,6 +256,16 @@ object Day15 extends App {
     else playUntilEnd(game.doRound(), roundNr+1)
   }
 
+  def playUntilElfsWinOrOneElfDies(nrOfElfes: Int, game: Game, roundNr: Int = 0): (Game, Int, Boolean) = {
+    println(s"Playing round nr: $roundNr")
+    println(s"**************************")
+    game.toLines.foreach(println)
+    println(s"**************************")
+    if(game.nrOfElfes < nrOfElfes) (game, roundNr, false)
+    else if(game.noEnemiesFound) (game, roundNr, true)
+    else playUntilElfsWinOrOneElfDies(nrOfElfes, game.doRound(), roundNr+1)
+  }
+
   def part1(lines: Vector[String]): Long = {
     val game = Game.parse(lines)
     val (endGame, rounds) = playUntilEnd(game)
@@ -261,6 +273,26 @@ object Day15 extends App {
     val sumOfallHitPoints = endGame.creatures.values.map(_.hitPoints).sum
     (rounds-1)*sumOfallHitPoints
   }
+
+  def part2(lines: Vector[String]): Long = {
+
+    @scala.annotation.tailrec
+    def part2Rec(attackPower: Int): Long = {
+      val game = Game.parse(lines, initialAttackPowerElves = attackPower)
+      val (endGame, rounds, won) = playUntilElfsWinOrOneElfDies(game.nrOfElfes, game)
+      if(won) {
+        println(s"Elfes win the game with attackpower $attackPower in rounds = $rounds")
+        val sumOfallHitPoints = endGame.creatures.values.map(_.hitPoints).sum
+        (rounds-1)*sumOfallHitPoints
+      } else {
+        part2Rec(attackPower+1)
+      }
+    }
+
+    part2Rec(4)
+  }
+
+
 
   val testInput1 = """#######
                      |#E..G.#
@@ -341,8 +373,9 @@ object Day15 extends App {
 //  assert(part1(testInput7.split("\n").toVector) == 27755)
 //  assert(part1(testInput8.split("\n").toVector) == 28944)
 //  assert(part1(testInput9.split("\n").toVector) == 18740)
-////
+//
   val input = Source.fromResource("Day15-Input.txt").getLines().toVector
-  println(part1(input)) //
+//  println(part1(input))
+    println(part2(input))
 
 }
