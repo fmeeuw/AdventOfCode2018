@@ -10,7 +10,10 @@ object Day16 extends App {
   case class InstructionArgs(opcode: Int, inputA: Int, inputB: Int, output: Int)
   case class InstructionDef(name: Symbol, inputA: InstructionInputType, inputB: InstructionInputType, fun: (Int, Int) => Int)
 
-  case class RegisterValues(values: Vector[Int] = Vector.fill(4)(0)) {
+  case object RegisterValues {
+    val Empty = RegisterValues(values = Vector.fill(4)(0))
+  }
+  case class RegisterValues(values: Vector[Int]) {
     def get(reference: Int): Int = {
       assert(reference >= 0 && reference <= values.size)
       values(reference)
@@ -45,9 +48,9 @@ object Day16 extends App {
   case class Sample(before: RegisterValues, args: InstructionArgs, after: RegisterValues)
 
 
-  def matchingInstructions(sample: Sample): Seq[RegisterValues] = instructions.map { instructionDef =>
-      sample.before.instruct(instructionDef, sample.args)
-    }.filter(_== sample.after)
+  def matchingInstructions(sample: Sample): Set[InstructionDef] = instructions.filter { instructionDef =>
+      sample.before.instruct(instructionDef, sample.args) == sample.after
+    }.toSet
 
   def toBit(boolean: Boolean): Int = if (boolean) 1 else 0
   val instructions: List[InstructionDef]  = List(
@@ -71,8 +74,63 @@ object Day16 extends App {
 
 
   val input1 = Source.fromResource("Day16-1-Input.txt").getLines().filterNot(_.isEmpty).grouped(3).map(Sample.parse).toList
+  val input2 = Source.fromResource("Day16-2-Input.txt").getLines().map { line =>
+    val List(opcode, a, b, output) = line.split(' ').map(_.toInt).toList
+    InstructionArgs(opcode, a, b, output)
+  }.toList
+
   def part1(samples: List[Sample]): Int = input1.map(matchingInstructions).count(_.size >= 3)
 
-  println(part1(input1))
+  case class PossibleAssignments(opcodeToInstruction: Map[Int, Set[Symbol]]) {
+    lazy val instructionToOpcode: Map[Symbol, Set[Int]] = {
+      opcodeToInstruction.toList.foldLeft(Map.empty[Symbol, Set[Int]]){ case (agg, (opcode, symbols)) =>
+        symbols.foldLeft(agg){(agg2, symbol) =>
+          val currentOpcodes = agg2.getOrElse(symbol, Set.empty[Int])
+          agg2.updated(symbol, currentOpcodes + opcode)
+        }
+      }
+    }
+
+    def remove(assignment: (Int, Symbol)): PossibleAssignments = {
+      copy(opcodeToInstruction = (opcodeToInstruction - assignment._1).mapValues(symbols => symbols - assignment._2).filterNot { _._2.isEmpty })
+    }
+
+    def nextAssignmentWithSingleInstruction: Option[(Int, Symbol)] = {
+      opcodeToInstruction.toList.collectFirst { case (opcode, symbols) if symbols.size == 1 => opcode -> symbols.head }
+    }
+    def nextAssignmentWithSingleOpcode: Option[(Int, Symbol)] = {
+      instructionToOpcode.toList.collectFirst { case (symbol, opcodes) if opcodes.size == 1 => opcodes.head -> symbol }
+    }
+  }
+
+  def part2(samples: List[Sample], testProgram: List[InstructionArgs]): Int = {
+    val possibleAssignmentsMap: Map[Int, Set[Symbol]] = samples.foldLeft(Map.empty[Int, Set[Symbol]]){ (agg, sample) =>
+      val currentDefs: Set[Symbol] = agg.getOrElse(sample.args.opcode, Set.empty[Symbol])
+      val matchingDefs = matchingInstructions(sample).map(_.name)
+      if (currentDefs.isEmpty) {
+        agg.updated(sample.args.opcode, matchingDefs)
+      } else {
+        agg.updated(sample.args.opcode, currentDefs.intersect(matchingDefs))
+      }
+    }
+    def eliminateRec(assignments: PossibleAssignments, assigned: Map[Int, Symbol]): Map[Int, Symbol] = {
+      val nextAssignment = assignments.nextAssignmentWithSingleInstruction orElse assignments.nextAssignmentWithSingleOpcode
+      nextAssignment match {
+        case Some(assignment) => eliminateRec(assignments.remove(assignment), assigned + assignment)
+        case None => assigned
+      }
+    }
+
+    val opcodeMap = eliminateRec(PossibleAssignments(possibleAssignmentsMap), Map.empty).mapValues(symbol => instructions.find(_.name == symbol).get)
+    assert(opcodeMap.keySet.size == opcodeMap.values.map(_.name).toSet.size)
+
+    val endState = testProgram.foldLeft(RegisterValues.Empty){(registers, instruction) =>
+      registers.instruct(opcodeMap(instruction.opcode), instruction)
+    }
+    endState.get(0)
+  }
+
+  println(part1(input1)) //529
+  println(part2(input1, input2)) //573
 
 }
